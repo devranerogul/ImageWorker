@@ -1,0 +1,46 @@
+{
+  "taskId": "123456",
+  "metadata": {
+    "author": "Devran Erogul",
+    "createdDate": "2024-11-18T10:00:00Z",
+    "description": "Sample image generation task"
+  },
+  "baseImage": {
+    "path": "sample-images/vickers-wellington-gr-mk-xiv.jpg",
+    "width": 1900,
+    "height": 1526
+  },
+  "layers": [
+    {
+      "type": "image",
+      "imageData": {
+        "path": "sample-images/avro-anson-art-ww2-war.jpg",
+        "position": { "x": 0, "y": 0 },
+        "size": { "width": 400, "height": 300 },
+        "opacity": 0.5
+      }
+    },
+    {
+      "type": "image",
+      "imageData": {
+        "path": "sample-images/junkers-ju-52-ww2-war.jpg",
+        "position": { "x": 400, "y": 50 },
+        "size": { "width": 500, "height": 250 },
+        "opacity": 0.8
+      }
+    },
+    {
+      "type": "text",
+      "textData": {
+        "content": "IMAGE REPLACING WORKS",
+        "position": { "x": 200, "y": 200 },
+        "font": {
+          "name": "Arial",
+          "size": 66,
+          "style": "Bold",
+          "color": "FFFF0000"
+        }
+      }
+    }
+  ]
+}

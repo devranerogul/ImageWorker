@@ -34,7 +34,11 @@ using (var baseImage = SKBitmap.Decode(task.BaseImage.Path))
                     var destRect = new SKRect(imageLayer.ImageData.Position.X, imageLayer.ImageData.Position.Y,
                         imageLayer.ImageData.Position.X + imageLayer.ImageData.Size.Width,
                         imageLayer.ImageData.Position.Y + imageLayer.ImageData.Size.Height);
-                    canvas.DrawBitmap(image, destRect);
+                    var paint = new SKPaint
+                    {
+                        Color = new SKColor(255, 255, 255, (byte)(255 * imageLayer.ImageData.Opacity))
+                    };
+                    canvas.DrawBitmap(image, destRect, paint);
                 }
                 Console.WriteLine($"Image layer replaced. Elapsed {watch.ElapsedMilliseconds} ms");
             }

@@ -17,7 +17,7 @@
         "path": "sample-images/avro-anson-art-ww2-war.jpg",
         "position": { "x": 0, "y": 0 },
         "size": { "width": 400, "height": 300 },
-        "opacity": 0.5
+        "opacity": 0.2
       }
     },
     {
@@ -26,7 +26,7 @@
         "path": "sample-images/junkers-ju-52-ww2-war.jpg",
         "position": { "x": 400, "y": 50 },
         "size": { "width": 500, "height": 250 },
-        "opacity": 0.8
+        "opacity": 0.2
       }
     },
     {

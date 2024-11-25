@@ -2,6 +2,10 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImageWorker", "ImageWorker\ImageWorker.csproj", "{35053CA9-6721-4D83-9130-2A893A123E45}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImageApi", "ImageApi\ImageApi.csproj", "{E3691491-6EE6-4FDB-937D-5B28AAF25B25}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImageCore", "ImageCore\ImageCore.csproj", "{E25BAA4B-4BAB-47EA-925D-D0C1D7F37478}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -12,5 +16,13 @@ Global
 		{35053CA9-6721-4D83-9130-2A893A123E45}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{35053CA9-6721-4D83-9130-2A893A123E45}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{35053CA9-6721-4D83-9130-2A893A123E45}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E3691491-6EE6-4FDB-937D-5B28AAF25B25}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E3691491-6EE6-4FDB-937D-5B28AAF25B25}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E3691491-6EE6-4FDB-937D-5B28AAF25B25}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E3691491-6EE6-4FDB-937D-5B28AAF25B25}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E25BAA4B-4BAB-47EA-925D-D0C1D7F37478}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E25BAA4B-4BAB-47EA-925D-D0C1D7F37478}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E25BAA4B-4BAB-47EA-925D-D0C1D7F37478}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E25BAA4B-4BAB-47EA-925D-D0C1D7F37478}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

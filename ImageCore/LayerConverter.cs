@@ -1,7 +1,7 @@
 using Newtonsoft.Json;
 
-namespace ImageWorker;
-public class LayerConverter : JsonConverter
+namespace ImageCore;
+public class LayerConverter : JsonConverter 
 {
     public override bool CanConvert(Type objectType)
     {

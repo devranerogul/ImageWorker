@@ -1,72 +1,66 @@
-﻿using ImageWorker;
+﻿using System.Text;
+using ImageWorker;
 using Newtonsoft.Json;
-using SkiaSharp;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
 
-var watch = System.Diagnostics.Stopwatch.StartNew();
+// Send a task to ImageWorker using 'gen_task' queue at RabbitMQ.Client
+ConnectionFactory factory = new ConnectionFactory();
+factory.Uri = new Uri("amqp://guest:guest@localhost:5672/");
+Console.WriteLine("Connecting to RabbitMQ");
+IConnection conn = await factory.CreateConnectionAsync();
+IChannel channel = await conn.CreateChannelAsync();
 
-Console.WriteLine($"Starting image generation at {DateTime.Now}");
+// Listen gen_task queue
+await channel.ExchangeDeclareAsync("direct_exchange", ExchangeType.Direct);
+await channel.QueueDeclareAsync("gen_task", true, false, false, null);
+await channel.QueueBindAsync("gen_task", "direct_exchange", "gen_task", null);
 
-watch.Start();
-
-var json = File.ReadAllText(args[0]);
-
-ImageTask task = JsonConvert.DeserializeObject<ImageTask>(json);
-
-Console.WriteLine($"Read task data in {watch.ElapsedMilliseconds} ms");
-
-using (var baseImage = SKBitmap.Decode(task.BaseImage.Path))
+// create a consumer
+var consumer = new AsyncEventingBasicConsumer(channel);
+consumer.ReceivedAsync += async (ch, ea) =>
 {
-    Console.WriteLine($"Read base image in {watch.ElapsedMilliseconds} ms");
+    Console.WriteLine("Connecting to RabbitMQ");
+    var body = ea.Body.ToArray();
+    var taskFile = Encoding.UTF8.GetString(body);
+    Console.WriteLine("Received: " + taskFile);
+    
+    var taskId = ea.BasicProperties.CorrelationId;
+    Console.WriteLine("Task ID: " + taskId);
+    
+    await channel.BasicAckAsync(ea.DeliveryTag, false);
 
-    using (var surface = SKSurface.Create(new SKImageInfo(baseImage.Width, baseImage.Height)))
+    var imgGenResult = ImageGenerator.GenerateImage(taskFile, taskId ?? Guid.NewGuid().ToString());
+    
+    var responseProps = new BasicProperties
     {
-        var canvas = surface.Canvas;
+        CorrelationId = taskId
+    };
+    
+    // Desearialize the result to byte array
+    string strResult = JsonConvert.SerializeObject(imgGenResult);
+    var response = Encoding.UTF8.GetBytes(strResult);
+    
+    // Add response publishing
+    await channel.BasicPublishAsync(
+        exchange: "direct_exchange",
+        routingKey: "gen_task_completed",  // New routing key for completion messages
+        mandatory: true,
+        basicProperties: responseProps,
+        body: response
+    );
+    
+    Console.WriteLine($"Sent completion message for task: {taskId}");
+};
 
-        canvas.Clear(SKColors.Transparent);
-        canvas.DrawBitmap(baseImage, 0, 0);
+// Add new queue binding for completion messages
+await channel.QueueDeclareAsync("gen_task_completed", true, false, false, null);
+await channel.QueueBindAsync("gen_task_completed", "direct_exchange", "gen_task_completed", null);
 
-        foreach (var layer in task.Layers)
-        {
-            if (layer is ImageLayer imageLayer)
-            {
-                using (var image = SKBitmap.Decode(imageLayer.ImageData.Path))
-                {
-                    var destRect = new SKRect(imageLayer.ImageData.Position.X, imageLayer.ImageData.Position.Y,
-                        imageLayer.ImageData.Position.X + imageLayer.ImageData.Size.Width,
-                        imageLayer.ImageData.Position.Y + imageLayer.ImageData.Size.Height);
-                    var paint = new SKPaint
-                    {
-                        Color = new SKColor(255, 255, 255, (byte)(255 * imageLayer.ImageData.Opacity))
-                    };
-                    canvas.DrawBitmap(image, destRect, paint);
-                }
-                Console.WriteLine($"Image layer replaced. Elapsed {watch.ElapsedMilliseconds} ms");
-            }
-            else if (layer is TextLayer textLayer)
-            {
-                var paint = new SKPaint
-                {
-                    Color = SKColor.Parse(textLayer.TextData.Font.Color),
-                    TextSize = textLayer.TextData.Font.Size,
-                    Typeface = SKTypeface.FromFamilyName(textLayer.TextData.Font.Name, SKFontStyleWeight.Normal,
-                        SKFontStyleWidth.Normal, SKFontStyleSlant.Upright)
-                };
+// this consumer tag identifies the subscription
+// when it has to be cancelled
+string consumerTag = await channel.BasicConsumeAsync("gen_task", false, consumer);
+Console.WriteLine("Listening to RabbitMQ");
+Console.ReadKey();
 
-                canvas.DrawText(textLayer.TextData.Content, textLayer.TextData.Position.X,
-                    textLayer.TextData.Position.Y, paint);
-                
-                Console.WriteLine($"Text layer replaced. Elapsed {watch.ElapsedMilliseconds} ms");
-            }
-        }
-        var renderingTimeStart = watch.ElapsedMilliseconds;
-        Console.WriteLine($"Rendering final image. Started from {renderingTimeStart} ms");
-        using (var image = surface.Snapshot())
-        using (var data = image.Encode(SKEncodedImageFormat.Png, 100))
-        using (var stream = File.OpenWrite("output.png"))
-        {
-            data.SaveTo(stream);
-            Console.WriteLine($"Final image saved. Elapsed {watch.ElapsedMilliseconds - renderingTimeStart} ms");            
-        }
-    }
-    Console.WriteLine($"Task completed in {watch.ElapsedMilliseconds} ms");
-}
+await conn.CloseAsync();

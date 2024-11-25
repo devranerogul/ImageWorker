@@ -1,6 +1,6 @@
 using Newtonsoft.Json;
 
-namespace ImageWorker;
+namespace ImageCore;
 using System;
 using System.Collections.Generic;
 
@@ -30,17 +30,17 @@ public class BaseImage
 [JsonConverter(typeof(LayerConverter))]
 public abstract class Layer
 {
-    public string Type { get; set; }
+    public string? Type { get; set; }
 }
 
 public class ImageLayer : Layer
 {
-    public ImageData ImageData { get; set; }
+    public ImageData? ImageData { get; set; }
 }
 
 public class TextLayer : Layer
 {
-    public TextData TextData { get; set; }
+    public TextData? TextData { get; set; }
 }
 
 public class ImageData

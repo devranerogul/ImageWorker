@@ -9,13 +9,11 @@
 
     <ItemGroup>
       <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+      <PackageReference Include="RabbitMQ.Client" Version="7.0.0" />
       <PackageReference Include="SkiaSharp" Version="3.118.0-preview.1.2" />
     </ItemGroup>
 
     <ItemGroup>
-      <None Update="test-task.json">
-        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      </None>
       <None Update="sample-images\avro-anson-art-ww2-war.jpg">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </None>
@@ -25,6 +23,10 @@
       <None Update="sample-images\vickers-wellington-gr-mk-xiv.jpg">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </None>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\ImageCore\ImageCore.csproj" />
     </ItemGroup>
 
 </Project>

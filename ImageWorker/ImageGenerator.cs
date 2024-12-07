@@ -14,7 +14,7 @@ public static class ImageGenerator
         Console.WriteLine($"Starting image generation at {DateTime.Now}");
 
         watch.Start();
-// set options for deserializing
+        // set options for deserializing
         JsonSerializerSettings settings = new JsonSerializerSettings
         {
             TypeNameHandling = TypeNameHandling.Auto
@@ -36,41 +36,39 @@ public static class ImageGenerator
                 canvas.Clear(SKColors.Transparent);
                 canvas.DrawBitmap(baseImage, 0, 0);
 
-                foreach (var layer in task.Layers)
+                foreach (var imageLayer in task.ImageLayers)
                 {
-                    if (layer is ImageLayer imageLayer)
+                    using (var image = SKBitmap.Decode(imageLayer.ImageData.Path))
                     {
-                        using (var image = SKBitmap.Decode(imageLayer.ImageData.Path))
-                        {
-                            var destRect = new SKRect(imageLayer.ImageData.Position.X, imageLayer.ImageData.Position.Y,
-                                imageLayer.ImageData.Position.X + imageLayer.ImageData.Size.Width,
-                                imageLayer.ImageData.Position.Y + imageLayer.ImageData.Size.Height);
-                            var paint = new SKPaint
-                            {
-                                Color = new SKColor(255, 255, 255, (byte)(255 * imageLayer.ImageData.Opacity))
-                            };
-                            canvas.DrawBitmap(image, destRect, paint);
-                        }
-
-                        Console.WriteLine($"Image layer replaced. Elapsed {watch.ElapsedMilliseconds} ms");
-                    }
-                    else if (layer is TextLayer textLayer)
-                    {
+                        var destRect = new SKRect(imageLayer.Position.X, imageLayer.Position.Y,
+                            imageLayer.Position.X + imageLayer.Size.Width,
+                            imageLayer.Position.Y + imageLayer.Size.Height);
                         var paint = new SKPaint
                         {
-                            Color = SKColor.Parse(textLayer.TextData.Font.Color),
-                            TextSize = textLayer.TextData.Font.Size,
-                            Typeface = SKTypeface.FromFamilyName(textLayer.TextData.Font.Name, SKFontStyleWeight.Normal,
-                                SKFontStyleWidth.Normal, SKFontStyleSlant.Upright)
+                            Color = new SKColor(255, 255, 255, (byte)(255 * imageLayer.Opacity))
                         };
-
-                        canvas.DrawText(textLayer.TextData.Content, textLayer.TextData.Position.X,
-                            textLayer.TextData.Position.Y, paint);
-
-                        Console.WriteLine($"Text layer replaced. Elapsed {watch.ElapsedMilliseconds} ms");
+                        canvas.DrawBitmap(image, destRect, paint);
                     }
+
+                    Console.WriteLine($"Image layer replaced. Elapsed {watch.ElapsedMilliseconds} ms");
                 }
 
+                foreach (var textLayer in task.TextLayers)
+                {
+                    var paint = new SKPaint
+                    {
+                        Color = SKColor.Parse(textLayer.TextData?.Font.Color),
+                        TextSize = textLayer.TextData.Font.Size,
+                        Typeface = SKTypeface.FromFamilyName(textLayer.TextData.Font.Family, SKFontStyleWeight.Normal,
+                            SKFontStyleWidth.Normal, SKFontStyleSlant.Upright)
+                    };
+
+                    canvas.DrawText(textLayer.TextData.Content, textLayer.Position.Y,
+                        textLayer.Position.Y, paint);
+
+                    Console.WriteLine($"Text layer replaced. Elapsed {watch.ElapsedMilliseconds} ms");
+                }
+                
                 var renderingTimeStart = watch.ElapsedMilliseconds;
                 Console.WriteLine($"Rendering final image. Started from {renderingTimeStart} ms");
                 using (var image = surface.Snapshot())
@@ -93,13 +91,15 @@ public static class ImageGenerator
             };
         }
     }
+    
 }
 
 public class ImageGenResult
 {
-    public string TaskId { get; set; }
-    public string ImagePath { get; set; }
-    public long ElapsedMilliseconds { get; set; }
-    public string ErrorMessage { get; set; }
-    public bool Success { get; set; }
+    public required string TaskId { get; set; }
+    public string? ImagePath { get; set; }
+    public required long ElapsedMilliseconds { get; set; }
+    
+    public string? ErrorMessage { get; set; }
+    public required bool Success { get; set; }
 }

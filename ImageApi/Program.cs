@@ -1,20 +1,35 @@
 using System.Text;
 using System.Text.Json;
+using Firebase.Auth;
+using Firebase.Auth.Providers;
+using Google.Cloud.Firestore;
 using RabbitMQ.Client;
 using ImageCore;
+using Microsoft.AspNetCore.Mvc;
 using RabbitMQ.Client.Events;
+using ImageApi;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.ConfigureHttpJsonOptions(options => {
-    options.SerializerOptions.Converters.Add(new ImageApi.LayerConverter());
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
     options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
 });
 
-
+// Add CORS services
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", builderI =>
+    {
+        builderI.AllowAnyOrigin()
+            .AllowAnyMethod()
+            .AllowAnyHeader();
+    });
+});
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -26,19 +41,138 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-/// <summary>
-/// Generate an image using the provided task file
-/// </summary>
-/// <param name="imageGenTask">Task details for image generation</param>
+// Use CORS policy
+app.UseCors("AllowAll");
+
+var settings = new ConfigurationBuilder()
+    .AddJsonFile("appsettings.json")
+    .Build();
+var firebaseConfig = new FirebaseAuthConfig
+{
+    // Get api key from appsettings.json
+    ApiKey = settings.GetValue("Firebase:ApiKey", ""),
+    AuthDomain = settings.GetValue("Firebase:AuthDomain", ""),
+    Providers =
+    [
+        new EmailProvider()
+    ]
+};
+
+app.MapGet("/template/{id}", async (string id) =>
+    {
+        var db = new FirestoreDbBuilder
+        {
+            ProjectId = settings.GetValue("Firebase:ProjectId", ""),
+            ApiKey = settings.GetValue("Firebase:ApiKey", ""),
+            ConverterRegistry = new ConverterRegistry
+            {
+                new FirestoreImageLayerConverter(),
+                new FirestoreTextLayerConverter(),
+                new FirestoreTemplateUpdateRequestConverter()
+            }
+        }.Build();
+
+        DocumentReference docRef = db.Collection("user-image-template").Document(id);
+        DocumentSnapshot snapshot = await docRef.GetSnapshotAsync();
+
+        if (!snapshot.Exists)
+        {
+            return Results.NotFound();
+        }
+
+        var template = snapshot.ConvertTo<TemplateUpdateRequest>();
+        
+        template.TemplateId = id;
+
+        return Results.Ok(template);
+    }).WithName("GetTemplate")
+    .Produces<TemplateUpdateRequest>(200)
+    .Produces(404);
+
+app.MapPut("/template/create", async ([FromBody] TemplateUpdateRequest templateRequest) =>
+    {
+        var db = new FirestoreDbBuilder
+        {
+            ProjectId = settings.GetValue("Firebase:ProjectId", ""),
+            ApiKey = settings.GetValue("Firebase:ApiKey", ""),
+            ConverterRegistry = new ConverterRegistry
+            {
+                new FirestoreImageLayerConverter(),
+                new FirestoreTextLayerConverter()
+            }
+        }.Build();
+
+        var templateData = new Dictionary<string, object>
+        {
+            { "templateId", templateRequest.TemplateId },
+            { "templateName", templateRequest.TemplateName },
+            { "canvasWidth", templateRequest.CanvasWidth },
+            { "canvasHeight", templateRequest.CanvasHeight },
+            { "description", templateRequest.Description },
+            { "createdAt", Timestamp.GetCurrentTimestamp() },
+            {
+                "imageLayers",
+                templateRequest.ImageLayers.Select(l => new FirestoreImageLayerConverter().ToFirestore(l)).ToList()
+            },
+            {
+                "textLayers",
+                templateRequest.TextLayers.Select(l => new FirestoreTextLayerConverter().ToFirestore(l)).ToList()
+            }
+        };
+
+        DocumentReference docRef = db.Collection("user-image-template").Document(templateRequest.TemplateId);
+
+        await docRef.SetAsync(templateData);
+
+        return Results.Ok(new { Id = docRef.Id, message = "Template updated successfully" });
+    }).WithName("UpdateTemplate")
+    .WithOpenApi();
+
+app.MapPost("/template/create", async ([FromBody] TemplateCreationRequest templateRequest) =>
+    {
+        var db = new FirestoreDbBuilder
+        {
+            ProjectId = settings.GetValue("Firebase:ProjectId", ""),
+            ApiKey = settings.GetValue("Firebase:ApiKey", ""),
+            ConverterRegistry = new ConverterRegistry
+            {
+                new FirestoreImageLayerConverter(),
+                new FirestoreTextLayerConverter()
+            }
+        }.Build();
+
+        var templateData = new Dictionary<string, object>
+        {
+            { "templateName", templateRequest.TemplateName },
+            { "description", templateRequest.Description },
+            { "canvasWidth", templateRequest.CanvasWidth },
+            { "canvasHeight", templateRequest.CanvasHeight },
+            { "createdAt", Timestamp.GetCurrentTimestamp() },
+            {
+                "imageLayers",
+                templateRequest.ImageLayers.Select(l => new FirestoreImageLayerConverter().ToFirestore(l)).ToList()
+            },
+            {
+                "textLayers",
+                templateRequest.TextLayers.Select(l => new FirestoreTextLayerConverter().ToFirestore(l)).ToList()
+            }
+        };
+
+        // Save to Firestore
+        var docRef = await db.Collection("user-image-template").AddAsync(templateData);
+
+        return Results.Ok(new { id = docRef.Id, message = "Template created successfully" });
+    }).WithName("CreateTemplate")
+    .WithOpenApi();
+
 app.MapPost("/image/generate", async (ImageTask imageGenTask) =>
     {
         // validate request body content has a base image and at least one layer
-        if (imageGenTask.BaseImage == null || imageGenTask.Layers == null || imageGenTask.Layers.Count == 0)
+        if (imageGenTask.ImageLayers.Count == 0 && imageGenTask.TextLayers.Count == 0)
         {
             return Results.BadRequest("Request body must contain a base image and at least one layer");
         }
-       
-        
+
         var taskId = Guid.NewGuid().ToString();
         var completionSource = new TaskCompletionSource<string>();
 
@@ -73,11 +207,10 @@ app.MapPost("/image/generate", async (ImageTask imageGenTask) =>
         await channel.ExchangeDeclareAsync("direct_exchange", ExchangeType.Direct);
         await channel.QueueDeclareAsync("gen_task", true, false, false, null);
         await channel.QueueBindAsync("gen_task", "direct_exchange", "gen_task", null);
-    
+
         // SET OPTIONS
         JsonSerializerOptions options = new JsonSerializerOptions
         {
-            Converters = { new ImageApi.LayerConverter() },
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         };
         var json = JsonSerializer.Serialize(imageGenTask, options);
@@ -108,4 +241,53 @@ app.MapPost("/image/generate", async (ImageTask imageGenTask) =>
     .WithName("GenerateImage")
     .WithOpenApi();
 
+//Generate a method for Signing Up using Firebase Authentication
+app.MapPost("/signup", async (SignupRequest signUp) =>
+{
+    var auth = new FirebaseAuthClient(firebaseConfig);
+
+    var response = await auth.CreateUserWithEmailAndPasswordAsync(signUp.Email, signUp.Password);
+
+    return Results.Ok(response);
+}).Accepts<SignupRequest>("application/json");
+
+// Generate a method for Signing In using Firebase Authentication
+app.MapPost("/signin", async (SignupRequest signIn) =>
+{
+    var auth = new FirebaseAuthClient(firebaseConfig);
+    try
+    {
+        var response = await auth.SignInWithEmailAndPasswordAsync(signIn.Email, signIn.Password);
+        return Results.Ok(response);
+    }
+    catch (FirebaseAuthException e)
+    {
+        return Results.Unauthorized();
+    }
+}).Accepts<SignupRequest>("application/json");
+
+
 app.Run();
+
+public class SignupRequest
+{
+    public required string Email { get; set; }
+    public required string Password { get; set; }
+}
+
+public class TemplateCreationRequest
+{
+    public string TemplateName { get; set; }
+    public string Description { get; set; }
+
+    public int CanvasWidth { get; set; }
+
+    public int CanvasHeight { get; set; }
+    public List<ImageLayer> ImageLayers { get; set; } = new();
+    public List<TextLayer> TextLayers { get; set; } = new();
+}
+
+public class TemplateUpdateRequest : TemplateCreationRequest
+{
+    public string TemplateId { get; set; }
+}

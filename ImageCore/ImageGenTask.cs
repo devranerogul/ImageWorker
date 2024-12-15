@@ -36,6 +36,8 @@ public class ImageLayer
     public Position Position { get; set; }
     public Size Size { get; set; }
     public float Opacity { get; set; }
+    
+    public int ZIndex { get; set; }
 }
 
 public class TextLayer
@@ -47,6 +49,8 @@ public class TextLayer
     public Position Position { get; set; }
     public Size Size { get; set; }
     public float Opacity { get; set; }
+    
+    public int ZIndex { get; set; }
 }
 
 public class ImageData

@@ -33,12 +33,13 @@ const fonts = [
 let textLayerCounter = 1;
 let imageLayerCounter = 1;
 
-// Initialize canvas with selection and control styles
+// Initialize canvas with proper settings
 let canvas = new Canvas('canvas', {
   controlsAboveOverlay: true,
   backgroundColor: '#ffffff',
   width: window.innerWidth - 450,
   height: window.innerHeight - 140,
+  radius: 0,
   selectionBorderColor: '#2196F3',
   selectionLineWidth: 2,
   transparentCorners: false,
@@ -46,6 +47,32 @@ let canvas = new Canvas('canvas', {
   cornerStrokeColor: '#fff',
   cornerSize: 10,
   padding: 5
+});
+canvas.preserveObjectStacking = true;  // This ensures objects maintain their stacking order during movement
+
+
+canvas.on('mouse:down', (event) => {
+  if (event.target) {
+    // If fabric.js found a target, use it (this respects z-index)
+    canvas.setActiveObject(event.target);
+    selectedObject = event.target;
+  } else {
+    canvas.discardActiveObject();
+    selectedObject = null;
+  }
+  
+  canvas.renderAll();
+  updateLayersList();
+});
+
+canvas.on('mouse:over', (event) => {
+  if (event.target) {
+    canvas.defaultCursor = 'pointer';
+  }
+});
+
+canvas.on('mouse:out', (event) => {
+  canvas.defaultCursor = 'default';
 });
 
 canvas.on('selection:created', (e) => setSelectedObject(e.selected[0]));
@@ -273,59 +300,73 @@ const createTemplate = async () => {
 }
 
 const getTemplateRequest = () => {
-    
   const objects = canvas.getObjects();
-    
+  
+  // Sort layers by their canvas index (which represents their visual order)
+  const allLayers = objects.map((obj, index) => ({
+    obj,
+    zIndex: objects.length - 1 - index
+  }));
 
-  const imageLayers = objects.filter(obj => obj.type === 'image').map(obj => {
-    return {
-      id: obj.id,
-      name: obj.name,
-      imageData: {
-        path: obj.getSrc() || obj._element?.src || ''
-      },
-      position: {
-        x: Math.round(obj.left),
-        y: Math.round(obj.top)
-      },
-      size: {
-        width: Math.round(obj.getScaledWidth()),
-        height: Math.round(obj.getScaledHeight())
-      },
-      opacity: obj.opacity || 1.0
-    };
-  });
-  const textLayers = objects.filter(obj => obj.type === 'textbox').map(obj => {
-    return {
-      id: obj.id,
-      name: obj.name,
-      textData: {
-        content: obj.text,
-        font: {
-          family: obj.fontFamily,
-          size: Math.round(obj.fontSize),
-          color: obj.fill,
-          isBold: obj.fontWeight === 'bold',
-          isItalic: obj.fontStyle === 'italic'
-        }
-      },
-      position: {
-        x: Math.round(obj.left),
-        y: Math.round(obj.top)
-      },
-      size: {
-        width: Math.round(obj.getScaledWidth()),
-        height: Math.round(obj.getScaledHeight())
-      },
-      opacity: obj.opacity || 1.0
-    };
-  });
+  const imageLayers = allLayers
+    .filter(layer => layer.obj.type === 'image')
+    .map(layer => {
+      const obj = layer.obj;
+      return {
+        id: obj.id,
+        name: obj.name,
+        imageData: {
+          path: obj.getSrc() || obj._element?.src || ''
+        },
+        position: {
+          x: Math.round(obj.left),
+          y: Math.round(obj.top)
+        },
+        size: {
+          width: Math.round(obj.getScaledWidth()),
+          height: Math.round(obj.getScaledHeight())
+        },
+        opacity: obj.opacity || 1.0,
+        zIndex: layer.zIndex
+      };
+    });
+
+  const textLayers = allLayers
+    .filter(layer => layer.obj.type === 'textbox')
+    .map(layer => {
+      const obj = layer.obj;
+      return {
+        id: obj.id,
+        name: obj.name,
+        textData: {
+          content: obj.text,
+          font: {
+            family: obj.fontFamily,
+            size: Math.round(obj.fontSize),
+            color: obj.fill,
+            isBold: obj.fontWeight === 'bold',
+            isItalic: obj.fontStyle === 'italic'
+          }
+        },
+        position: {
+          x: Math.round(obj.left),
+          y: Math.round(obj.top)
+        },
+        size: {
+          width: Math.round(obj.getScaledWidth()),
+          height: Math.round(obj.getScaledHeight())
+        },
+        opacity: obj.opacity || 1.0,
+        zIndex: layer.zIndex
+      };
+    });
 
   const templateCreationRequest = {
     templateName: localStorage.getItem('templateName') || 'Untitled',
     description: 'Template created from Kevlar Editor',
-    canvasWidth : canvas.getWidth(),
-    canvasHeight : canvas.getHeight(),
+    canvasWidth: canvas.getWidth(),
+    canvasHeight: canvas.getHeight(),
+    radius: canvas.get('radius'),
     imageLayers,
     textLayers
   };
@@ -352,21 +393,11 @@ document.querySelector('.add-image').addEventListener('click', () => {
   };
 });
 
-// when click on canvas, set the active object to the object under the cursor
-canvas.on('mouse:down', (event) => {
-  const object = canvas.getActiveObject();
-  if (object) {
-    canvas.setActiveObject(object);
-    setSelectedObject(object);
-  } else {
-    // Clear properties panel when clicking empty canvas
-    clearPropertiesPanel();
-  }
-});
-
 // set the selected object and update properties panel
 let selectedObject;
 function setSelectedObject(object) {
+  console.log("Selected object:", object);
+
   selectedObject = object;
   
   const propertiesPanel = document.querySelector('.properties-panel');
@@ -385,7 +416,7 @@ function setSelectedObject(object) {
     propertiesHTML = `
       <div class="properties-content">
         <div class="property-group">
-          <label>Layer Name</label>
+          <label>Layer Name <small style="opacity: 0.5;float: right;">${object.id}</small></label>
           <input type="text" class="property-input" data-property="name" value="${object.name || ''}">
         </div>
         <div class="property-row">
@@ -399,8 +430,8 @@ function setSelectedObject(object) {
           </div>
         </div>
 
+        <h3>Layer Order</h3>
         <div class="layer-controls">
-          <h3>Layer Order</h3>
           <div class="layer-buttons">
             <button class="tool-button bring-front" title="Bring to Front">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -532,6 +563,9 @@ function setSelectedObject(object) {
   });
 
   // Add shadow control event listeners
+
+  console.log("loo", object);
+
   if (object.type === 'textbox') {
     const shadowColor = propertiesPanel.querySelector('.shadow-color');
     const shadowOpacity = propertiesPanel.querySelector('.shadow-opacity');
@@ -571,25 +605,62 @@ function setSelectedObject(object) {
   const sendBackward = propertiesPanel.querySelector('.send-backward');
   const sendToBack = propertiesPanel.querySelector('.send-back');
 
+  const updateObjectOrder = (action) => {
+    if (!selectedObject) return;
+    
+    const activeSelection = canvas.getActiveObject();
+    const currentIndex = canvas.getObjects().indexOf(selectedObject);
+    const currentZIndex = canvas.getObjects().length - 1 - currentIndex;
+    
+
+
+    // Store the current state
+    canvas.store = canvas.store || [];
+    canvas.store.push(canvas.toJSON());
+
+
+    
+    action();
+    
+    const newIndex = canvas.getObjects().indexOf(selectedObject);
+    const newZIndex = canvas.getObjects().length - 1 - newIndex;
+    
+    console.log(`Layer "${selectedObject.name || 'Unnamed'}" moved from z-index ${currentZIndex} to ${newZIndex}`);
+    
+    // Update object's internal z-index property
+    selectedObject.set('zIndex', newZIndex);
+    
+    if (activeSelection) {
+      canvas.setActiveObject(selectedObject);
+      selectedObject.setCoords();
+    }
+    
+    // Ensure proper rendering
+    canvas.requestRenderAll();
+    updateLayersList();
+    
+    // Emit change event for template saving
+    canvas.fire('object:modified', { target: selectedObject });
+  };
+
   bringToFront.addEventListener('click', () => {
-    console.log(selectedObject);
-    canvas.bringObjectToFront(selectedObject);
-    canvas.renderAll();
+    console.log("Bring to front");
+    updateObjectOrder(() => canvas.bringObjectToFront(selectedObject));
   });
 
   bringForward.addEventListener('click', () => {
-    canvas.bringObjectForward(selectedObject);
-    canvas.renderAll();
+    console.log("Bring to forward");
+    updateObjectOrder(() => canvas.bringObjectForward(selectedObject));
   });
 
   sendBackward.addEventListener('click', () => {
-    canvas.sendObjectBackwards(selectedObject);
-    canvas.renderAll();
+    console.log("Send backward");
+    updateObjectOrder(() => canvas.sendObjectBackwards(selectedObject));
   });
 
   sendToBack.addEventListener('click', () => {
-    canvas.sendObjectToBack(selectedObject);
-    canvas.renderAll();
+    console.log("Send to Back");
+    updateObjectOrder(() => canvas.sendObjectToBack(selectedObject));
   });
 }
 
@@ -645,6 +716,238 @@ function clearPropertiesPanel() {
   const propertiesPanel = document.querySelector('.properties-panel');
   propertiesPanel.innerHTML = '<p>No object selected</p>';
 }
+
+// Layer management functions
+function updateLayersList() {
+  const layersList = document.querySelector('.layers-list');
+  // Get objects in reverse order to show top layers first
+  const objects = canvas.getObjects().slice().reverse();
+  
+  layersList.innerHTML = objects.map((obj, index) => {
+    const isSelected = obj === selectedObject;
+    const isVisible = !obj.hidden;
+    const isLocked = obj.locked;
+    const layerType = obj.type === 'textbox' ? 'Text' : 'Image';
+    const actualIndex = canvas.getObjects().length - 1 - index;
+    const zIndex = canvas.getObjects().length - 1 - canvas.getObjects().indexOf(obj);
+    
+    return `
+      <div class="layer-item ${isSelected ? 'selected' : ''}" data-index="${actualIndex}" data-zindex="${zIndex}">
+        <div class="layer-controls">
+          <button class="layer-visibility" title="${isVisible ? 'Hide' : 'Show'}" data-visible="${isVisible}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M15 12C15 13.6569 13.6569 15 12 15C10.3431 15 9 13.6569 9 12C9 10.3431 10.3431 9 12 9C13.6569 9 15 10.3431 15 12Z" 
+                stroke="currentColor" stroke-width="2"/>
+              <path d="M12 5C7.63636 5 4 8.5 4 12C4 15.5 7.63636 19 12 19C16.3636 19 20 15.5 20 12C20 8.5 16.3636 5 12 5Z" 
+                stroke="currentColor" stroke-width="2"/>
+            </svg>
+          </button>
+          <button class="layer-lock" title="${isLocked ? 'Unlock' : 'Lock'}" data-locked="${isLocked}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 14.5V16.5M7 10.5V7.5C7 4.73858 9.23858 2.5 12 2.5C14.7614 2.5 17 4.73858 17 7.5V10.5M7 10.5C5.89543 10.5 5 11.3954 5 12.5V19.5C5 20.6046 5.89543 21.5 7 21.5H17C18.1046 21.5 19 20.6046 19 19.5V12.5C19 11.3954 18.1046 10.5 17 10.5M7 10.5H17" 
+                stroke="currentColor" stroke-width="2"/>
+            </svg>
+          </button>
+        </div>
+        <div class="layer-info">
+          <span class="layer-type">${layerType}</span>
+          <span class="layer-name">${obj.name || `${layerType} ${actualIndex + 1}`}</span>
+          <span class="layer-zindex" style="opacity: 0.5; font-size: 0.8em;">z:${zIndex}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Add event listeners to layer controls
+  layersList.querySelectorAll('.layer-item').forEach((item) => {
+    const actualIndex = parseInt(item.dataset.index);
+    const obj = canvas.getObjects()[actualIndex];
+    
+    if (!obj) return;
+    
+    // Layer selection
+    item.addEventListener('click', (e) => {
+      if (!e.target.closest('button')) {
+        canvas.discardActiveObject();
+        canvas.setActiveObject(obj);
+        canvas.renderAll();
+        setSelectedObject(obj);
+      }
+    });
+    
+    // Visibility toggle
+    item.querySelector('.layer-visibility').addEventListener('click', (e) => {
+      const button = e.currentTarget;
+      const visible = button.dataset.visible === 'true';
+      obj.set('hidden', visible);
+      canvas.renderAll();
+      updateLayersList();
+    });
+    
+    // Lock toggle
+    item.querySelector('.layer-lock').addEventListener('click', (e) => {
+      const button = e.currentTarget;
+      const locked = button.dataset.locked === 'true';
+      obj.set('locked', !locked);
+      obj.set('selectable', locked);
+      canvas.renderAll();
+      updateLayersList();
+    });
+  });
+}
+
+// Update object order with proper z-index handling
+function updateObjectOrder(action) {
+  if (!selectedObject) return;
+  
+  const activeSelection = canvas.getActiveObject();
+  const currentIndex = canvas.getObjects().indexOf(selectedObject);
+  const currentZIndex = canvas.getObjects().length - 1 - currentIndex;
+  
+  // Store the current state
+  canvas.store = canvas.store || [];
+  canvas.store.push(canvas.toJSON());
+  
+  action();
+  
+  const newIndex = canvas.getObjects().indexOf(selectedObject);
+  const newZIndex = canvas.getObjects().length - 1 - newIndex;
+  
+  console.log(`Layer "${selectedObject.name || 'Unnamed'}" moved from z-index ${currentZIndex} to ${newZIndex}`);
+  
+  // Update object's internal z-index property
+  selectedObject.set('zIndex', newZIndex);
+  
+  if (activeSelection) {
+    canvas.setActiveObject(selectedObject);
+    selectedObject.setCoords();
+  }
+  
+  // Ensure proper rendering
+  canvas.requestRenderAll();
+  updateLayersList();
+  
+  // Emit change event for template saving
+  canvas.fire('object:modified', { target: selectedObject });
+}
+
+// Add event listeners for layer ordering buttons
+document.querySelector('.properties-panel').addEventListener('click', (e) => {
+  if (!selectedObject) return;
+
+  if (e.target.closest('.bring-front')) {
+    updateObjectOrder(() => {
+      selectedObject.bringToFront();
+      canvas.renderAll();
+    });
+  } else if (e.target.closest('.bring-forward')) {
+    updateObjectOrder(() => {
+      selectedObject.bringForward();
+      canvas.renderAll();
+    });
+  } else if (e.target.closest('.send-backward')) {
+    updateObjectOrder(() => {
+      selectedObject.sendBackwards();
+      canvas.renderAll();
+    });
+  } else if (e.target.closest('.send-back')) {
+    updateObjectOrder(() => {
+      selectedObject.sendToBack();
+      canvas.renderAll();
+    });
+  }
+});
+
+// Add z-index preservation to canvas serialization
+canvas.on('object:added', (e) => {
+  const obj = e.target;
+  const zIndex = canvas.getObjects().length - 1 - canvas.getObjects().indexOf(obj);
+  obj.set('zIndex', zIndex);
+  updateLayersList();
+});
+
+canvas.on('before:render', () => {
+  // Sort objects by z-index before rendering
+  const objects = canvas.getObjects();
+  objects.sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+});
+
+// Update layers list when canvas objects change
+canvas.on('object:added', updateLayersList);
+canvas.on('object:removed', updateLayersList);
+canvas.on('object:modified', updateLayersList);
+canvas.on('selection:created', updateLayersList);
+canvas.on('selection:updated', updateLayersList);
+canvas.on('selection:cleared', updateLayersList);
+
+// Global layer controls
+document.querySelector('.layer-visibility-all').addEventListener('click', () => {
+  const objects = canvas.getObjects();
+  const allVisible = objects.every(obj => !obj.hidden);
+  
+  objects.forEach(obj => {
+    obj.set('hidden', allVisible);
+  });
+  
+  canvas.renderAll();
+  updateLayersList();
+});
+
+document.querySelector('.layer-lock-all').addEventListener('click', () => {
+  const objects = canvas.getObjects();
+  const allLocked = objects.every(obj => obj.locked);
+  
+  objects.forEach(obj => {
+    obj.set('locked', !allLocked);
+    obj.set('selectable', allLocked);
+  });
+  
+  canvas.renderAll();
+  updateLayersList();
+});
+
+// Initialize layers list
+updateLayersList();
+
+// Canvas settings functionality
+const settingsButton = document.querySelector('.settings-button');
+const modal = document.getElementById('canvasSettingsModal');
+const applyButton = document.getElementById('applyCanvasSize');
+const cancelButton = document.getElementById('cancelCanvasSize');
+const widthInput = document.getElementById('canvasWidth');
+const heightInput = document.getElementById('canvasHeight');
+const radiusInput = document.getElementById('canvasRadius'); // Add radius input reference
+
+// Show modal with current canvas dimensions
+settingsButton.addEventListener('click', () => {
+  widthInput.value = canvas.width;
+  heightInput.value = canvas.height;
+  radiusInput.value = canvas.get('radius') || 0;
+  modal.style.display = 'block';
+});
+
+// Apply new canvas dimensions
+applyButton.addEventListener('click', () => {
+  const newWidth = parseInt(widthInput.value);
+  const newHeight = parseInt(heightInput.value);
+  const newRadius = parseInt(radiusInput.value); // Get new radius value
+  
+  if (newWidth > 0 && newHeight > 0 && newRadius >= 0) { // Add radius validation
+    canvas.setWidth(newWidth);
+    canvas.setHeight(newHeight);
+    canvas.set('radius', newRadius); // Set new radius value
+    
+    // Update CSS variable for radius
+    document.documentElement.style.setProperty('--canvas-radius', `${newRadius}px`);
+    
+    canvas.renderAll();
+    modal.style.display = 'none';
+  }
+});
+
+cancelButton.addEventListener('click', () => {
+  modal.style.display = 'none';
+});
 
 // Zoom functionality
 const zoomInButton = document.querySelector('.zoom-in');
@@ -744,57 +1047,32 @@ canvas.on('mouse:move', function(opt) {
     const canvasContainer = document.querySelector('.canvas-container');
     canvasContainer.scrollBy(-deltaX, -deltaY);
   }
-});
+}); 
 
 canvas.on('mouse:up', function() {
   isPanning = false;
   canvas.selection = true;
 });
 
-// Canvas settings functionality
-const settingsButton = document.querySelector('.settings-button');
-const modal = document.getElementById('canvasSettingsModal');
-const applyButton = document.getElementById('applyCanvasSize');
-const cancelButton = document.getElementById('cancelCanvasSize');
-const widthInput = document.getElementById('canvasWidth');
-const heightInput = document.getElementById('canvasHeight');
-
-// Show modal with current canvas dimensions
-settingsButton.addEventListener('click', () => {
-  widthInput.value = canvas.width;
-  heightInput.value = canvas.height;
-  modal.style.display = 'block';
-});
-
-// Apply new canvas dimensions
-applyButton.addEventListener('click', () => {
-  const newWidth = parseInt(widthInput.value);
-  const newHeight = parseInt(heightInput.value);
-  
-  if (newWidth > 0 && newHeight > 0) {
-    canvas.setWidth(newWidth);
-    canvas.setHeight(newHeight);
-    canvas.renderAll();
-    modal.style.display = 'none';
+// Add delete functionality for the selected layer
+document.querySelector('.delete-button').addEventListener('click', () => {
+  if (!selectedObject) {
+    alert('Please select a layer to delete');
+    return;
   }
-});
 
-// Close modal on cancel
-cancelButton.addEventListener('click', () => {
-  modal.style.display = 'none';
-});
-
-// Close modal when clicking outside
-window.addEventListener('click', (event) => {
-  if (event.target === modal) {
-    modal.style.display = 'none';
+  if (confirm(`Are you sure you want to delete the layer "${selectedObject.name || 'Unnamed Layer'}"?`)) {
+    canvas.remove(selectedObject);
+    selectedObject = null;
+    clearPropertiesPanel();
+    canvas.requestRenderAll();
+    updateLayersList();
   }
 });
 
 // Add function to load template
 async function loadTemplate(templateId) {
   try {
-    // Fetch template data from API
     const response = await fetch(`${config.apiUrl}/template/${templateId}`);
     if (!response.ok) {
       throw new Error(`Failed to load template: ${response.statusText}`);
@@ -808,68 +1086,76 @@ async function loadTemplate(templateId) {
 
     canvas.width = template.canvasWidth;
     canvas.height = template.canvasHeight;
+    canvas.setWidth(template.canvasWidth);
+    canvas.setHeight(template.canvasHeight);
+    canvas.set('radius', template.radius || 0);
+    
+    // Update CSS variable for radius
+    document.documentElement.style.setProperty('--canvas-radius', `${template.radius || 0}px`);
 
-    canvas.renderAll();    
-    
-    // Load text layers
-    for (const textLayer of template.textLayers) {
-      const text = new Textbox(textLayer.textData.content, {
-        left: textLayer.position.x,
-        top: textLayer.position.y,
-        width: textLayer.size.width,
-        height: textLayer.size.height,
-        selectable: true,
-        editable: true,
-        fontFamily: textLayer.textData.font.family,
-        fontSize: textLayer.textData.font.size,
-        fill: textLayer.textData.font.color,
-        id: textLayer.id,
-        name: textLayer.name,
-        opacity: textLayer.opacity,
-        padding: 5,
-        cornerSize: 10,
-        transparentCorners: false,
-        cornerColor: '#2196F3',
-        cornerStrokeColor: '#fff',
-        borderColor: '#2196F3',
-        borderScaleFactor: 2
-      });
-      canvas.add(text);
-    }
-    
-    // Load image layers
-    for (const imageLayer of template.imageLayers) {
-      // Create image element
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.src = imageLayer.imageData.path;
-      
-      // Wait for image to load
-      await new Promise((resolve, reject) => {
-        img.onload = resolve;
-        img.onerror = reject;
-      });
-      
-      // Create fabric image object
-      const fabricImage = new FabricImage(img, {
-        left: imageLayer.position.x,
-        top: imageLayer.position.y,
-        width: imageLayer.size.width,
-        height: imageLayer.size.height,
-        selectable: true,
-        id: imageLayer.id,
-        name: imageLayer.name,
-        opacity: imageLayer.opacity,
-        padding: 5,
-        cornerSize: 10,
-        transparentCorners: false,
-        cornerColor: '#2196F3',
-        cornerStrokeColor: '#fff',
-        borderColor: '#2196F3',
-        borderScaleFactor: 2
-      });
-      
-      canvas.add(fabricImage);
+    // Combine all layers and sort by z-index
+    const allLayers = [
+      ...template.textLayers.map(layer => ({ type: 'text', data: layer })),
+      ...template.imageLayers.map(layer => ({ type: 'image', data: layer }))
+    ].sort((a, b) => a.data.zIndex - b.data.zIndex);
+
+    // Load layers in correct order
+    for (const layer of allLayers) {
+      if (layer.type === 'text') {
+        const textLayer = layer.data;
+        const text = new Textbox(textLayer.textData.content, {
+          left: textLayer.position.x,
+          top: textLayer.position.y,
+          width: textLayer.size.width,
+          height: textLayer.size.height,
+          selectable: true,
+          editable: true,
+          fontFamily: textLayer.textData.font.family,
+          fontSize: textLayer.textData.font.size,
+          fill: textLayer.textData.font.color,
+          id: textLayer.id,
+          name: textLayer.name,
+          opacity: textLayer.opacity,
+          padding: 5,
+          cornerSize: 10,
+          transparentCorners: false,
+          cornerColor: '#2196F3',
+          cornerStrokeColor: '#fff',
+          borderColor: '#2196F3',
+          borderScaleFactor: 2
+        });
+        canvas.add(text);
+      } else {
+        const imageLayer = layer.data;
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = imageLayer.imageData.path;
+        
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
+        
+        const fabricImage = new FabricImage(img, {
+          left: imageLayer.position.x,
+          top: imageLayer.position.y,
+          width: imageLayer.size.width,
+          height: imageLayer.size.height,
+          selectable: true,
+          id: imageLayer.id,
+          name: imageLayer.name,
+          opacity: imageLayer.opacity,
+          padding: 5,
+          cornerSize: 10,
+          transparentCorners: false,
+          cornerColor: '#2196F3',
+          cornerStrokeColor: '#fff',
+          borderColor: '#2196F3',
+          borderScaleFactor: 2
+        });
+        
+        canvas.add(fabricImage);
+      }
     }
     
     // Store template info in localStorage
@@ -882,12 +1168,10 @@ async function loadTemplate(templateId) {
       templateName.textContent = template.templateName;
     }
     
-    // Render the canvas
     canvas.renderAll();
     
   } catch (error) {
     console.error('Error loading template:', error);
-    // You might want to show an error message to the user
   }
 }
 
@@ -896,21 +1180,3 @@ function getUrlParams() {
   const params = new URLSearchParams(window.location.search);
   return Object.fromEntries(params.entries());
 }
-
-document.addEventListener('click', (e) => {
-  if (!selectedObject) return;
-
-  if (e.target.closest('.bring-front')) {
-    selectedObject.bringToFront();
-    canvas.renderAll();
-  } else if (e.target.closest('.bring-forward')) {
-    selectedObject.bringForward();
-    canvas.renderAll();
-  } else if (e.target.closest('.send-backward')) {
-    selectedObject.sendBackwards();
-    canvas.renderAll();
-  } else if (e.target.closest('.send-back')) {
-    selectedObject.sendToBack();
-    canvas.renderAll();
-  }
-});

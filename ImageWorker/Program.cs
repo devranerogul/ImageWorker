@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System;
+using System.Text;
 using ImageWorker;
 using Newtonsoft.Json;
 using RabbitMQ.Client;

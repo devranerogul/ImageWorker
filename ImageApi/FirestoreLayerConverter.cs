@@ -23,7 +23,8 @@ namespace ImageApi
                     },
                     Opacity = dict.TryGetValue("opacity", out var opacity) ? Convert.ToSingle(opacity) : 1.0f,
                     Id = dict.TryGetValue("id", out var id) ? id as string : null,
-                    Name = dict.TryGetValue("name", out var name) ? name as string : null
+                    Name = dict.TryGetValue("name", out var name) ? name as string : null,
+                    ZIndex = dict.TryGetValue("zIndex", out var zIndex) ? Convert.ToInt32(zIndex) : 0
                 };
 
                 if (dict.TryGetValue("imageData", out var imageDataObj) && imageDataObj is Dictionary<string, object> imageData)
@@ -49,8 +50,9 @@ namespace ImageApi
                 { "width", layer.Size.Width },
                 { "height", layer.Size.Height },
                 { "opacity", layer.Opacity },
-                {"id", layer.Id},
-                {"name", layer.Name}
+                { "id", layer.Id},
+                { "name", layer.Name},
+                { "zIndex", layer.ZIndex}
             };
 
             if (layer.ImageData != null)
@@ -85,7 +87,8 @@ namespace ImageApi
                     },
                     Opacity = dict.TryGetValue("opacity", out var opacity) ? Convert.ToSingle(opacity) : 1.0f,
                     Id = dict.TryGetValue("id", out var id) ? id as string : null,
-                    Name = dict.TryGetValue("name", out var name) ? name as string : null
+                    Name = dict.TryGetValue("name", out var name) ? name as string : null,
+                    ZIndex = dict.TryGetValue("zIndex", out var zIndex) ? Convert.ToInt32(zIndex) : 0
                 };
 
                 if (dict.TryGetValue("textData", out var textDataObj) && textDataObj is Dictionary<string, object> textData)
@@ -122,7 +125,8 @@ namespace ImageApi
                 { "y", layer.Position.Y },
                 { "width", layer.Size.Width },
                 { "height", layer.Size.Height },
-                { "opacity", layer.Opacity }
+                { "opacity", layer.Opacity },
+                { "zIndex", layer.ZIndex }
             };
 
             if (layer.TextData != null)
@@ -164,6 +168,7 @@ namespace ImageApi
                     Description = dict.TryGetValue("description", out var description) ? description as string : null,
                     CanvasHeight = dict.TryGetValue("canvasHeight", out var canvasHeight) ? Convert.ToInt32(canvasHeight) : 0,
                     CanvasWidth = dict.TryGetValue("canvasWidth", out var canvasWidth) ? Convert.ToInt32(canvasWidth) : 0,
+                    Radius = dict.TryGetValue("radius", out var radius) ? Convert.ToInt32(radius) : 0,
                     ImageLayers = dict.TryGetValue("imageLayers", out var imageLayersObj) && imageLayersObj is List<object> imageLayers
                         ? imageLayers.Select(l => l as Dictionary<string, object>).Select(l => new FirestoreImageLayerConverter().FromFirestore(l)).ToList()
                         : new List<ImageLayer>(),
@@ -186,6 +191,7 @@ namespace ImageApi
                 { "description", templateUpdateRequest.Description },
                 { "canvasWidth", templateUpdateRequest.CanvasWidth },
                 { "canvasHeight", templateUpdateRequest.CanvasHeight },
+                { "radius", templateUpdateRequest.Radius },
                 { "imageLayers", templateUpdateRequest.ImageLayers.Select(l => new FirestoreImageLayerConverter().ToFirestore(l)).ToList() },
                 { "textLayers", templateUpdateRequest.TextLayers.Select(l => new FirestoreTextLayerConverter().ToFirestore(l)).ToList() }
             };

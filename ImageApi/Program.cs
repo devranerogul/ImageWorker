@@ -81,7 +81,7 @@ app.MapGet("/template/{id}", async (string id) =>
         }
 
         var template = snapshot.ConvertTo<TemplateUpdateRequest>();
-        
+
         template.TemplateId = id;
 
         return Results.Ok(template);
@@ -107,6 +107,7 @@ app.MapPut("/template/create", async ([FromBody] TemplateUpdateRequest templateR
             { "templateId", templateRequest.TemplateId },
             { "templateName", templateRequest.TemplateName },
             { "canvasWidth", templateRequest.CanvasWidth },
+            { "radius", templateRequest.Radius},
             { "canvasHeight", templateRequest.CanvasHeight },
             { "description", templateRequest.Description },
             { "createdAt", Timestamp.GetCurrentTimestamp() },
@@ -146,6 +147,7 @@ app.MapPost("/template/create", async ([FromBody] TemplateCreationRequest templa
             { "templateName", templateRequest.TemplateName },
             { "description", templateRequest.Description },
             { "canvasWidth", templateRequest.CanvasWidth },
+            { "radius", templateRequest.Radius},
             { "canvasHeight", templateRequest.CanvasHeight },
             { "createdAt", Timestamp.GetCurrentTimestamp() },
             {
@@ -283,6 +285,8 @@ public class TemplateCreationRequest
     public int CanvasWidth { get; set; }
 
     public int CanvasHeight { get; set; }
+
+    public int Radius { get; set; }
     public List<ImageLayer> ImageLayers { get; set; } = new();
     public List<TextLayer> TextLayers { get; set; } = new();
 }
